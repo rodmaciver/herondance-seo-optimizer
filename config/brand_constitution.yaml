@@ -1,0 +1,22 @@
+site:
+  name: "Heron Dance / Zen Mountain Journal"
+  url: "https://herondance.org"
+  theme: >
+    Art, writing, and contemplative reflection inspired by ancient Zen and
+    Taoist poetry, wilderness solitude, meditation, silence, and inner quiet.
+  audience: >
+    Zen and Taoist practitioners, readers curious about Zen and Tao, and
+    seekers drawn to inner peace, contemplative journaling, nature, quiet,
+    and solitude.
+guiding_principle: >
+  What strengthens the contemplative ecosystem and identity of the site
+  while improving discoverability? Do not optimize primarily for maximum
+  traffic if that would weaken the site's distinctive contemplative voice.
+constraints:
+  - "Keep language aligned with the contemplative, literary, Zen- and Tao-informed tone of the site."
+  - "Avoid generic self-help, broad wellness, or diluted lifestyle language."
+  - "If something should not change, say to keep the current version."
+objectives:
+  - "Rank well on long-tail searches without compromising the work."
+  - "Be findable by people searching Taoist and Zen perspectives and deeper themes (wu wei in art, Taoist creativity, contemplative painting practice)."
+  - "Build internal authority for the broader Zen Mountain / contemplative practice brand."

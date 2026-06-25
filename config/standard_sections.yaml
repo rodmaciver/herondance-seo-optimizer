@@ -1,0 +1,9 @@
+legacy_sections_to_remove:
+  - "Nurturing the Song Within"
+  - "Meditations on Gratitude"
+  - "The Poetry Diary"
+detection: "case-insensitive substring match against headings and body text"
+current_section_to_add:
+  title: "The Tao Te Ching Journal"
+  content: >
+    Add the standard Tao Te Ching Journal section here.

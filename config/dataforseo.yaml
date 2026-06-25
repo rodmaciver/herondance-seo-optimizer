@@ -1,0 +1,51 @@
+# DataForSEO keyword enrichment configuration.
+#
+# Credentials come from the DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD env vars
+# (see .env.example) -- never put credentials in this file.
+#
+# mode: "sandbox" returns DataForSEO's free sample/dummy data -- use this
+# while building and testing. Switch to "live" only when you're ready to
+# spend real DataForSEO credits (set a daily spend cap in their dashboard
+# first).
+mode: "live"
+
+# Locale DataForSEO should price/measure keywords for. Confirm this matches
+# the client's target audience before going live.
+locale:
+  location_code: 2840  # United States
+  language_code: "en"
+
+# All cutoffs below are starting hypotheses -- tune them after eyeballing
+# real difficulty/volume numbers for this niche. No code change needed to
+# re-tune: edit these values and re-run.
+thresholds:
+  # Keyword difficulty (0-100, from DataForSEO) cutoffs for a low-authority site.
+  difficulty_low_max: 30      # <= this: realistically winnable now
+  difficulty_medium_max: 60   # <= this: a medium-term reach goal; above: long shot
+  min_volume: 10              # below this, volume is a tiebreaker only, not a gate
+  voice_flag_threshold: 3     # voice_score (1-5) below this gets flagged/demoted
+
+# Category labels shown in the review UI, keyed by "<viability tier>_<voice tier>".
+categories:
+  winnable_on_voice: "Winnable & on-voice"
+  winnable_off_voice: "Winnable, off-voice (flagged)"
+  reach_on_voice: "Reach goal & on-voice"
+  reach_off_voice: "Reach goal, off-voice (flagged)"
+  long_shot_on_voice: "Long shot & on-voice"
+  long_shot_off_voice: "Long shot, off-voice (flagged)"
+  volume_only_on_voice: "Volume data, on-voice (difficulty: n/a)"
+  volume_only_off_voice: "Volume data, off-voice (flagged)"
+  no_data_on_voice: "No search data, on-voice"
+  no_data_off_voice: "No search data, off-voice (flagged)"
+
+# DataForSEO Labs endpoints (bulk_keyword_difficulty, related_keywords) require
+# a Labs subscription -- they are NOT included in the basic prepaid plan.
+# Set enable_labs: true only if your DataForSEO account has Labs access.
+# With enable_labs: false, only search volume (Google Ads endpoint, available
+# on all plans) is fetched; keyword difficulty will show as "no data".
+enable_labs: false
+
+# How widely to cast the net before grounding/judging.
+keyword_candidates_per_generator: 12   # per generator model, semantic fit only
+related_keywords_per_seed: 10          # DataForSEO related terms per seed keyword (Labs only)
+max_seed_keywords_for_related: 15      # cap on keywords seeding the related-keyword lookup (Labs only)

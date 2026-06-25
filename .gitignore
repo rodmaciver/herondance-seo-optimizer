@@ -1,0 +1,26 @@
+.venv/
+__pycache__/
+*.pyc
+output/*
+!output/.gitkeep
+data/
+docs/
+
+# Local deploy script (personal GCP account)
+deploy.sh
+
+# Environment files (all variants — keep .env.example)
+.env
+.env.*
+!.env.example
+
+# Credential and key files
+config/sheets-key.json
+config/*-key.json
+config/*-credentials.json
+credentials.json
+service-account*.json
+*.key
+*.pem
+*.p12
+*.pfx

@@ -1,0 +1,19 @@
+seo_title:
+  max_chars: 60
+  format: "Primary phrase | secondary phrase, pipe separator"
+  primary_keyword_position: "as early as natural"
+meta_description:
+  max_chars: 155
+  goal: "earn the click; match page promise"
+url_slug:
+  style: "short, lowercase, hyphenated, 3-6 words, no stop words unless meaningful"
+  note: "Any URL change requires a 301 redirect mapping (old path -> new path)."
+h1:
+  count: 1
+  alignment: "must match SEO title intent, need not be identical"
+body:
+  change_budget: "exactly ONE body-content change (revision, addition, heading change, or structural improvement)"
+keywords:
+  primary: 1
+  secondary: "2-4"
+  grounding: "prefer terms with demonstrated impressions in search data when available"

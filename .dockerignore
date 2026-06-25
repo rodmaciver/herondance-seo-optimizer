@@ -1,0 +1,10 @@
+.env
+__pycache__/
+*.pyc
+.git/
+output/
+data/
+venv/
+.venv/
+*.json
+docs/
