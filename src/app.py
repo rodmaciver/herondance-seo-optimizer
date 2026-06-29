@@ -467,9 +467,18 @@ def approve(
 
     result = render_pastepack(plan, snapshot, operator="admin")
 
+    drive_note = ""
+    if sheets_client.available():
+        try:
+            docx_filename = Path(result["docx_path"]).name
+            drive_url = sheets_client.upload_docx(result["docx_path"], docx_filename)
+            drive_note = f"\n\n📁 [Saved to Google Drive]({drive_url})"
+        except Exception as exc:
+            drive_note = f"\n\n⚠️ Drive upload failed: {exc}"
+
     confirmation = (
         "**Next:** make the Squarespace edits, then manually move the URL to "
-        "'URLs Done' in the Google Sheet."
+        f"'URLs Done' in the Google Sheet.{drive_note}"
     )
 
     return result["markdown"], confirmation, gr.update(visible=True, value=result["docx_path"])

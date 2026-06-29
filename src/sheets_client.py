@@ -10,7 +10,8 @@ import pandas as pd
 
 DRIVE_FILE_ID = "1LIa3h_oksQUVtjHCQE5nRPz7kZko361Z"
 QUEUE_TAB = "URLs to Do"
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SHARED_DRIVE_FOLDER_ID = "0AHp_CfZhbhV0Uk9PVA"
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 # Local dev fallback: place a service account key here (never commit it).
 _LOCAL_KEY_PATH = Path(__file__).resolve().parent.parent / "config" / "sheets-key.json"
@@ -56,4 +57,33 @@ def read_queue() -> pd.DataFrame:
     buffer.seek(0)
     return pd.read_excel(buffer, sheet_name=QUEUE_TAB, header=None)
 
+
+def upload_docx(local_path: str, filename: str) -> str:
+    """Upload a .docx file to the Shared Drive folder.
+
+    Returns the web view URL of the uploaded file.
+    supportsAllDrives=True is required for Shared Drive access.
+    """
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    creds = _credentials()
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    file_metadata = {
+        "name": filename,
+        "parents": [SHARED_DRIVE_FOLDER_ID],
+    }
+    media = MediaFileUpload(
+        local_path,
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+    uploaded = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        supportsAllDrives=True,
+        fields="id,webViewLink",
+    ).execute()
+
+    return uploaded.get("webViewLink", "")
 
