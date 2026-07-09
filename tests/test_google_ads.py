@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from src.google_ads import _check
+from src.google_ads import _check, _extract_page_words
+from src.schema import PageSnapshot
 
 
 def _assets(**overrides):
@@ -44,6 +45,36 @@ class GoogleAdsValidationTests(unittest.TestCase):
             _assets(negative_keywords=["taoist inner energy", "energy drink", "battery"])
         )
         self.assertTrue(any("both positive and negative" in value for value in failures))
+
+    def test_accepts_empty_negative_list(self):
+        """A focused page may have no wrong-intent terms; empty is valid."""
+        self.assertEqual(_check(_assets(negative_keywords=[])), [])
+
+    def test_rejects_page_derived_negatives(self):
+        """The 'mud settling' case: negatives mined from the page's own imagery."""
+        page_words = _extract_page_words(
+            PageSnapshot(
+                url="https://example.org/stillness",
+                title="Stillness and the Tao Te Ching",
+                h1="Do You Have the Patience to Wait Till Your Mud Settles?",
+                meta_description="Reflections on stillness in chapter 15.",
+                headings=["The Muddy Water Clears"],
+                body_text=(
+                    "Like muddy water left to settle, the mind clears in stillness. "
+                    "The rice vessel sits empty; the dipper rests by the spring water."
+                ),
+            )
+        )
+        failures = _check(
+            _assets(negative_keywords=["mud settling", "rice vessel", "hiking gear"]),
+            page_words=page_words,
+        )
+        self.assertTrue(any("page's own content" in value for value in failures))
+        joined = " ".join(failures)
+        self.assertIn("mud settling", joined)
+        self.assertIn("rice vessel", joined)
+        # A legitimate wrong-intent negative must NOT be flagged.
+        self.assertNotIn("hiking gear", joined)
 
 
 if __name__ == "__main__":
