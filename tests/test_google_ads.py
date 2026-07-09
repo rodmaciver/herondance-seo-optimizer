@@ -94,6 +94,35 @@ class GoogleAdsValidationTests(unittest.TestCase):
         # Merchandise the studio does not sell stays a valid negative.
         self.assertNotIn("mug designs", joined)
 
+    def test_duplicate_headline_failure_names_the_lines(self):
+        """Tonight's production case: retry loop needs to see WHICH lines collide."""
+        failures = _check(
+            _assets(
+                headlines=[
+                    "Tao of Suffering and Desire",
+                    "Suffering and Desire of Tao",
+                    "Zen Silence Practice",
+                ]
+            )
+        )
+        joined = " ".join(failures)
+        self.assertIn("Near-duplicate headlines", joined)
+        self.assertIn("Tao of Suffering and Desire", joined)
+        self.assertIn("Suffering and Desire of Tao", joined)
+
+    def test_rejects_retired_brand_name(self):
+        failures = _check(
+            _assets(
+                descriptions=[
+                    "A Taoist reflection on inner energy and silence.",
+                    "Reflections on love in the Tao. Heron Dance Art Studio.",
+                ]
+            )
+        )
+        joined = " ".join(failures)
+        self.assertIn("retired brand name", joined)
+        self.assertIn("Zen Mountain Journal", joined)
+
 
 if __name__ == "__main__":
     unittest.main()
