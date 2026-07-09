@@ -24,7 +24,7 @@ Every headline must contain at least one of:
 - A page-specific named entity that carries clear Zen or Taoist identity
 - The ad group's own keyword vocabulary
 - A plain factual page-content description
-- A brand line such as Heron Dance Art Studio or Art and Essays by Rod MacIver
+- A brand line such as Zen Mountain Journal or Art and Essays by Rod MacIver
 
 "Solitude" alone fails this rule. "Zen solitude" or "Taoist solitude" passes.
 Do not invent claims or make the line promotional. The headline should read like
@@ -75,7 +75,7 @@ REQUIRED OUTPUT:
 - 2 to 4 descriptions (max 90 characters each), targeting 4 where possible, where likely or very possible to contribute positively to results.
 - 3 to 8 core phrase-match keywords where likely or very possible to receive searches. Format in quotes.
 - For each core keyword, 2 to 4 word-order and minor variants where likely or very possible to contribute positively to results. Format each in brackets.
-- 3 to 10 page-specific negative keywords — terms likely to attract irrelevant traffic based on this specific page's content. Do not include any term already listed in the campaign-level negatives above.
+- 0 to 10 page-specific negative keywords — real-world searches with the WRONG INTENT that this page's keywords might accidentally attract: commerce (posters, mugs, furniture), travel and outdoor recreation (tours, hiking gear, trail maps), academic study (thesis, citation, course), crafts and how-to, or a different famous namesake. A negative keyword must NEVER be built from this page's own content, imagery, or vocabulary — words and images that appear on the page belong to the readers we WANT, so blocking them turns away our own audience. Every negative must contain at least one word that does not appear anywhere on the page. Do not include any term already listed in the campaign-level negatives above. If no genuinely wrong-intent terms exist for this page, return an empty list — an empty list is a correct and welcome answer; never invent negatives to fill a quota.
 - At least one specific named entity (person, book, concept, or place) from the page must appear in headlines or descriptions.
 
 USE PAGE-SPECIFIC TERMS: Final SEO title, page title, headings, named writers, named poems, named books, translators, distinctive phrases, narrow Taoist/Zen/contemplative concepts.
@@ -211,6 +211,53 @@ def _dedupe_key(value: str) -> tuple[str, ...]:
     return tuple(sorted(set(re.findall(r"[a-z0-9]+", value.casefold()))))
 
 
+_NEGATIVE_STOPWORDS = {
+    "a", "an", "the", "and", "or", "of", "for", "in", "on", "to", "with",
+    "by", "at", "from", "as", "is", "are", "how", "what", "who",
+}
+
+
+def _stem(word: str) -> str:
+    """Crude stem so 'settling' matches 'settles': trim common suffixes."""
+    for suffix in ("ing", "ers", "er", "ies", "ed", "es", "s"):
+        if word.endswith(suffix) and len(word) - len(suffix) >= 3:
+            return word[: -len(suffix)]
+    return word
+
+
+def _extract_page_words(snapshot: "PageSnapshot") -> set[str]:
+    """Return stemmed lowercase words from the page's visible content."""
+    sources = (
+        [snapshot.h1 or "", snapshot.title or "", snapshot.meta_description or ""]
+        + list(snapshot.headings or [])
+        + [snapshot.body_text or ""]
+    )
+    words: set[str] = set()
+    for text in sources:
+        for token in re.findall(r"[a-zA-Zéàü'\-]+", text.lower()):
+            words.add(_stem(token))
+    return words
+
+
+def _page_derived_negatives(neg_kws: list[str], page_words: set[str]) -> list[str]:
+    """Return negatives whose every content word appears on the page.
+
+    A negative built entirely from the page's own vocabulary is the signature
+    of an imagery-derived negative (e.g. 'mud settling' on a Tao Te Ching
+    chapter 15 page) and would block the page's own audience.
+    """
+    derived = []
+    for neg in neg_kws:
+        content_words = [
+            _stem(w)
+            for w in re.findall(r"[a-zA-Zéàü'\-]+", str(neg).lower())
+            if w not in _NEGATIVE_STOPWORDS
+        ]
+        if content_words and all(w in page_words for w in content_words):
+            derived.append(str(neg))
+    return derived
+
+
 def _has_all_caps_word(value: str) -> bool:
     return any(
         token.isupper() and len(token) > 1 and token not in {"SEO", "RSA", "CPC"}
@@ -237,7 +284,11 @@ def _context_violations(text: str) -> list[str]:
     return violations
 
 
-def _check(assets: dict, page_entities: set[str] | None = None) -> list[str]:
+def _check(
+    assets: dict,
+    page_entities: set[str] | None = None,
+    page_words: set[str] | None = None,
+) -> list[str]:
     """Return violation messages; empty list means clean."""
     failures = []
     headlines = assets.get("headlines", [])
@@ -252,8 +303,8 @@ def _check(assets: dict, page_entities: set[str] | None = None) -> list[str]:
         failures.append(f"Need 2–4 descriptions, got {len(descriptions)}")
     if not (3 <= len(core_kws) <= 8):
         failures.append(f"Need 3–8 core keywords, got {len(core_kws)}")
-    if not (3 <= len(neg_kws) <= 10):
-        failures.append(f"Need 3–10 page-specific negative keywords, got {len(neg_kws)}")
+    if len(neg_kws) > 10:
+        failures.append(f"Max 10 page-specific negative keywords, got {len(neg_kws)}")
 
     for core in core_kws:
         cleaned = str(core).strip().strip("[]\"").strip()
@@ -290,6 +341,14 @@ def _check(assets: dict, page_entities: set[str] | None = None) -> list[str]:
             "Page negatives repeat campaign negatives: "
             + ", ".join(sorted(repeated_campaign_negatives))
         )
+    if page_words:
+        derived = _page_derived_negatives(neg_kws, page_words)
+        if derived:
+            failures.append(
+                "Negative keywords built from the page's own content/imagery "
+                "(these would block the page's own audience — replace with "
+                "wrong-intent terms or omit): " + ", ".join(sorted(derived))
+            )
 
     for i, h in enumerate(headlines, 1):
         if len(h) > 30:
@@ -372,6 +431,7 @@ def generate_ad_assets(
     last_failures: list[str] = []
     last_assets: dict = {}
     page_entities = _extract_page_entities(snapshot)
+    page_words = _extract_page_words(snapshot)
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         user_prompt = user
@@ -384,7 +444,7 @@ def generate_ad_assets(
         try:
             result = call_model(model_config_id, _SYSTEM, user_prompt, _AdAssets, temperature=0.7)
             last_assets = result
-            last_failures = _check(result, page_entities)
+            last_failures = _check(result, page_entities, page_words)
             if not last_failures:
                 return {
                     "headlines": result["headlines"],
