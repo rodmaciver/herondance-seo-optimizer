@@ -75,7 +75,7 @@ REQUIRED OUTPUT:
 - 2 to 4 descriptions (max 90 characters each), targeting 4 where possible, where likely or very possible to contribute positively to results.
 - 3 to 8 core phrase-match keywords where likely or very possible to receive searches. Format in quotes.
 - For each core keyword, 2 to 4 word-order and minor variants where likely or very possible to contribute positively to results. Format each in brackets.
-- 0 to 10 page-specific negative keywords — real-world searches with the WRONG INTENT that this page's keywords might accidentally attract: commerce (posters, mugs, furniture), travel and outdoor recreation (tours, hiking gear, trail maps), academic study (thesis, citation, course), crafts and how-to, or a different famous namesake. A negative keyword must NEVER be built from this page's own content, imagery, or vocabulary — words and images that appear on the page belong to the readers we WANT, so blocking them turns away our own audience. Every negative must contain at least one word that does not appear anywhere on the page. Do not include any term already listed in the campaign-level negatives above. If no genuinely wrong-intent terms exist for this page, return an empty list — an empty list is a correct and welcome answer; never invent negatives to fill a quota.
+- 0 to 10 page-specific negative keywords — real-world searches with the WRONG INTENT that this page's keywords might accidentally attract: merchandise the studio does not sell (mugs, t-shirts, phone cases, furniture, coloring pages), travel and outdoor recreation (tours, hiking gear, trail maps), academic study (thesis, citation, course), crafts and how-to, or a different famous namesake. PROTECTED PRODUCTS — the studio sells original paintings, watercolors, archival and canvas prints, framed art, contemplative journals, notecards, and books. NEVER include a negative keyword containing: print, prints, canvas, framed, painting, paintings, watercolor, watercolors, journal, journals, book, books, card, cards, artwork — people searching those terms are potential customers, not irrelevant traffic. A negative keyword must also NEVER be built from this page's own content, imagery, or vocabulary — words and images that appear on the page belong to the readers we WANT, so blocking them turns away our own audience. Every negative must contain at least one word that does not appear anywhere on the page. Do not include any term already listed in the campaign-level negatives above. If no genuinely wrong-intent terms exist for this page, return an empty list — an empty list is a correct and welcome answer; never invent negatives to fill a quota.
 - At least one specific named entity (person, book, concept, or place) from the page must appear in headlines or descriptions.
 
 USE PAGE-SPECIFIC TERMS: Final SEO title, page title, headings, named writers, named poems, named books, translators, distinctive phrases, narrow Taoist/Zen/contemplative concepts.
@@ -239,6 +239,25 @@ def _extract_page_words(snapshot: "PageSnapshot") -> set[str]:
     return words
 
 
+# Products the studio sells; negatives containing these would block customers.
+_PROTECTED_PRODUCT_TERMS = {
+    "print", "prints", "canvas", "framed", "painting", "paintings",
+    "watercolor", "watercolors", "journal", "journals", "book", "books",
+    "card", "cards", "notecard", "notecards", "artwork",
+}
+
+
+def _protected_product_negatives(neg_kws: list[str]) -> list[str]:
+    """Return negatives that would block searches for products the studio sells."""
+    protected_stems = {_stem(w) for w in _PROTECTED_PRODUCT_TERMS}
+    hits = []
+    for neg in neg_kws:
+        tokens = re.findall(r"[a-zA-Zéàü'\-]+", str(neg).lower())
+        if any(_stem(t) in protected_stems for t in tokens):
+            hits.append(str(neg))
+    return hits
+
+
 def _page_derived_negatives(neg_kws: list[str], page_words: set[str]) -> list[str]:
     """Return negatives whose every content word appears on the page.
 
@@ -340,6 +359,14 @@ def _check(
         failures.append(
             "Page negatives repeat campaign negatives: "
             + ", ".join(sorted(repeated_campaign_negatives))
+        )
+    protected_hits = _protected_product_negatives(neg_kws)
+    if protected_hits:
+        failures.append(
+            "Negative keywords would block searches for products the studio "
+            "sells (prints, paintings, journals, books, cards — these "
+            "searchers are potential customers; remove them, do not replace "
+            "with other product terms): " + ", ".join(sorted(protected_hits))
         )
     if page_words:
         derived = _page_derived_negatives(neg_kws, page_words)
