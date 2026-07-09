@@ -1,7 +1,9 @@
 """Pydantic data contracts shared across the pipeline stages."""
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import json
+
+from pydantic import BaseModel, Field, field_validator
 
 
 class PageSnapshot(BaseModel):
@@ -38,10 +40,10 @@ class BodyChange(BaseModel):
 class PlanItem(BaseModel):
     field: str  # "seo_title" | "h1" | "url_slug" | "meta_description" | "keywords"
     decision: str
-    source: str  # which candidate it came from, "blended", or "judge's own"
-    rationale: str
-    rubric_check: str
-    brand_check: str
+    source: str = ""
+    rationale: str = ""
+    rubric_check: str = ""
+    brand_check: str = ""
 
 
 class EvaluatedKeyword(BaseModel):
@@ -71,6 +73,17 @@ class ExecutionPlan(BaseModel):
     body_changes: list[BodyChange]
     redirect_mapping: str | None = None
     keyword_pool: list[EvaluatedKeyword] = Field(default_factory=list)
+
+    @field_validator("items", "body_changes", "secondary_keywords", "keyword_pool", mode="before")
+    @classmethod
+    def _parse_json_string(cls, v: object) -> object:
+        if isinstance(v, str):
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                from json_repair import repair_json
+                return json.loads(repair_json(v))
+        return v
 
 
 class BrandFlag(BaseModel):

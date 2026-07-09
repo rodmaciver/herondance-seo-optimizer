@@ -20,3 +20,17 @@ objectives:
   - "Rank well on long-tail searches without compromising the work."
   - "Be findable by people searching Taoist and Zen perspectives and deeper themes (wu wei in art, Taoist creativity, contemplative painting practice)."
   - "Build internal authority for the broader Zen Mountain / contemplative practice brand."
+google_ads_keywords:
+  match_type: "Phrase Match"
+  bidding: "Manual CPC, Max CPC $0.20, Enhanced CPC off"
+  keyword_guideline: >
+    When generating or selecting keywords for Google Ads, always retain a specific
+    spiritual or philosophical anchor. Never simplify a keyword down to a generic
+    category such as "nature poems", "meditation", or "mindfulness". If a phrase
+    must be shortened for Phrase Match viability, strip highly descriptive adjectives
+    (e.g. "birdsong", "quiet", "silence") but always preserve the core spiritual
+    modifier. Balance the keyword pool roughly 50/50: approximately half of the
+    keywords must include a Zen anchor (e.g. "Zen", "Zen poetry", "Zen practice"),
+    and approximately half must include a Tao or Taoist anchor (e.g. "Tao Te Ching",
+    "Taoist", "wu wei"). Never default to a keyword that could describe any general
+    spiritual or wellness brand.

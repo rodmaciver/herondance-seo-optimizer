@@ -40,6 +40,18 @@ candidates each proposed only one) -- the exact headings/text changes and
 exactly where they go. Every body_change MUST include an `anchor_text` that
 is an EXACT VERBATIM quote copied from the page body text provided, so a
 human can find it in the page editor without guessing.
+The `instruction` field describes LOCATION and ACTION only — never embed
+the new_text content inside the instruction. The content belongs in `new_text`.
+  BAD:  "Insert a new heading: Zhuangzi's Butterfly Dream"
+  GOOD: "Immediately before the sentence 'A man dreams he is a butterfly.', insert a new heading."
+The instruction must also be self-contained about location — never write
+"after this sentence", "before this paragraph", or any phrasing that uses a
+pronoun or positional reference without quoting the actual text:
+  BAD:  "After this sentence, add a paragraph about…"
+  GOOD: "After the sentence 'Do you not see that you and I…', add a paragraph about…"
+`new_text` must be plain text only — no Markdown syntax (no ##, **, *, etc.).
+For headings, write just the heading words; for body text, write just the prose.
+Do NOT include notes like "(not using Markdown syntax)" anywhere in instruction or new_text.
 
 If the page's URL slug changes, set redirect_mapping to
 "<old-path> -> <new-path> 301"; otherwise set it to null.
@@ -182,18 +194,23 @@ def enforce_standard_sections(plan: ExecutionPlan, snapshot: PageSnapshot) -> Ex
     """
     standard_sections = _load_yaml("standard_sections.yaml")
 
-    existing_removes = {bc.anchor_text for bc in plan.body_changes if bc.action == "remove_section"}
+    # Dedup on instruction text — anchor_text from the judge is a body excerpt
+    # and will never match the section name, so it can't be used for dedup.
+    existing_remove_instructions = {
+        bc.instruction for bc in plan.body_changes if bc.action == "remove_section"
+    }
     for hit in snapshot.legacy_sections_found:
         # hit looks like "Section Name (near: 'H2: heading text')"
-        match = re.search(r"near: '(?:H\d: )?(.*)'\)$", hit)
-        anchor = match.group(1) if match else hit.split(" (near:")[0]
-        if anchor not in existing_removes:
-            section_name = hit.split(" (near:")[0]
+        section_name = hit.split(" (near:")[0]
+        instruction = f"Remove the legacy section '{section_name}' from this page."
+        if instruction not in existing_remove_instructions:
+            match = re.search(r"near: '(?:H\d: )?(.*)'\)$", hit)
+            anchor = match.group(1) if match else section_name
             plan.body_changes.append(
                 BodyChange(
                     action="remove_section",
                     anchor_text=anchor,
-                    instruction=f"Remove the legacy section '{section_name}' from this page.",
+                    instruction=instruction,
                     new_text=None,
                     automatic=True,
                 )
@@ -270,6 +287,15 @@ def synthesize(
     system, user = build_judge_prompt(candidates, snapshot, brand, rubric, gsc_row, enriched_pool)
     result = call_model(judge_model_id, system, user, ExecutionPlan, temperature=0.3)
     result["page_url"] = snapshot.url
+    # Belt-and-suspenders: Claude occasionally returns list/dict fields as JSON
+    # strings inside tool_use blocks. Unwrap any that slipped through.
+    import json as _json
+    for _k, _v in list(result.items()):
+        if isinstance(_v, str) and _v.strip()[:1] in ("[", "{"):
+            try:
+                result[_k] = _json.loads(_v)
+            except (ValueError, _json.JSONDecodeError):
+                pass
     plan = ExecutionPlan(**result)
     plan = validate_plan(plan, rubric)
     plan = enforce_standard_sections(plan, snapshot)

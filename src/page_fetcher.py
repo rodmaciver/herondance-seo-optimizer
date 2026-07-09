@@ -35,10 +35,10 @@ def _extract_main_content(soup: BeautifulSoup) -> BeautifulSoup:
 def _detect_legacy_sections(headings: list[str], body_text: str) -> list[str]:
     legacy_sections = _load_legacy_sections()
     found = []
-    haystacks = [h.lower() for h in headings] + [body_text.lower()]
+    lowered_headings = [h.lower() for h in headings]
     for section in legacy_sections:
         needle = section.lower()
-        if any(needle in h for h in haystacks):
+        if any(needle in h for h in lowered_headings):
             anchor = next((h for h in headings if needle in h.lower()), section)
             found.append(f"{section} (near: {anchor!r})")
     return found

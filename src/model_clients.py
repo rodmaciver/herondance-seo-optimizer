@@ -62,6 +62,26 @@ def get_model_config(model_id: str) -> dict:
     raise ValueError(f"Unknown model id: {model_id}")
 
 
+def _unwrap_json_strings(obj: object) -> object:
+    """Recursively parse any string values that are valid JSON arrays or objects.
+
+    Claude's tool_use occasionally serialises nested lists/dicts as JSON strings
+    instead of inline structures. This normalises them before Pydantic validation.
+    """
+    if isinstance(obj, dict):
+        return {k: _unwrap_json_strings(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_unwrap_json_strings(v) for v in obj]
+    if isinstance(obj, str):
+        stripped = obj.strip()
+        if stripped and stripped[0] in ("{", "["):
+            try:
+                return _unwrap_json_strings(json.loads(stripped))
+            except (json.JSONDecodeError, ValueError):
+                pass
+    return obj
+
+
 def _call_anthropic(model: str, system: str, user: str, schema_model: Type[BaseModel], temperature: float) -> dict:
     import anthropic
 
@@ -79,7 +99,7 @@ def _call_anthropic(model: str, system: str, user: str, schema_model: Type[BaseM
     )
     for block in response.content:
         if block.type == "tool_use":
-            return block.input
+            return _unwrap_json_strings(block.input)
     raise RuntimeError("Anthropic response contained no tool_use block")
 
 
@@ -109,24 +129,32 @@ def _call_openai_compatible(
             },
         )
         return json.loads(response.choices[0].message.content)
-    except Exception:
-        # Fallback for providers (e.g. Gemini's OpenAI-compatible endpoint)
-        # that don't fully support json_schema strict mode.
-        response = client.chat.completions.create(
-            model=model,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": user
-                    + "\n\nRespond with ONLY a single JSON object matching this schema:\n"
-                    + json.dumps(schema),
-                },
-            ],
-            response_format={"type": "json_object"},
-        )
-        return json.loads(response.choices[0].message.content)
+    except (json.JSONDecodeError, ValueError):
+        # Provider accepted json_schema but returned unparseable content — fall back.
+        pass
+    except Exception as exc:
+        from openai import BadRequestError
+        # Only fall back if the provider explicitly rejected json_schema strict mode.
+        # Re-raise auth errors, rate limits, network failures, and any other real error.
+        if not isinstance(exc, BadRequestError):
+            raise
+    # Fallback for providers that don't support json_schema strict mode
+    # (e.g. Gemini's OpenAI-compatible endpoint): embed schema in prompt instead.
+    response = client.chat.completions.create(
+        model=model,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": user
+                + "\n\nRespond with ONLY a single JSON object matching this schema:\n"
+                + json.dumps(schema),
+            },
+        ],
+        response_format={"type": "json_object"},
+    )
+    return json.loads(response.choices[0].message.content)
 
 
 def call_model(

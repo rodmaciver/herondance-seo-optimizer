@@ -39,8 +39,8 @@ def available() -> bool:
     return bool(os.environ.get("SHEETS_SERVICE_ACCOUNT_KEY")) or _LOCAL_KEY_PATH.exists()
 
 
-def read_queue() -> pd.DataFrame:
-    """Download the xlsx from Google Drive and return a raw headerless DataFrame."""
+def _download_queue_bytes() -> bytes:
+    """Download the queue xlsx from Google Drive and return raw bytes."""
     from googleapiclient.discovery import build
     from googleapiclient.http import MediaIoBaseDownload
 
@@ -54,8 +54,95 @@ def read_queue() -> pd.DataFrame:
     while not done:
         _, done = downloader.next_chunk()
 
-    buffer.seek(0)
-    return pd.read_excel(buffer, sheet_name=QUEUE_TAB, header=None)
+    return buffer.getvalue()
+
+
+def read_queue() -> pd.DataFrame:
+    """Download the xlsx from Google Drive and return a raw headerless DataFrame."""
+    raw_bytes = _download_queue_bytes()
+    return pd.read_excel(io.BytesIO(raw_bytes), sheet_name=QUEUE_TAB, header=None)
+
+
+def read_queue_with_bytes() -> tuple[pd.DataFrame, bytes]:
+    """Download the xlsx once; return (raw_headerless_df, raw_bytes).
+
+    The raw bytes are handed to the batch runner so it can call
+    update_queue_cell() / upload_queue() without a second download.
+    """
+    raw_bytes = _download_queue_bytes()
+    df = pd.read_excel(io.BytesIO(raw_bytes), sheet_name=QUEUE_TAB, header=None)
+    return df, raw_bytes
+
+
+def update_queue_cell(xlsx_bytes: bytes, row: int, col: int, value: str) -> bytes:
+    """Write a single cell in the in-memory xlsx and return the updated bytes.
+
+    row / col are 1-based (openpyxl convention).
+    """
+    import openpyxl
+
+    buf = io.BytesIO(xlsx_bytes)
+    wb = openpyxl.load_workbook(buf)
+    ws = wb[QUEUE_TAB]
+    ws.cell(row=row, column=col, value=value)
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def upload_queue(xlsx_bytes: bytes) -> None:
+    """Overwrite the queue xlsx on Google Drive with updated bytes."""
+    import os
+    import tempfile
+
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    creds = _credentials()
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp.write(xlsx_bytes)
+        tmp_path = tmp.name
+
+    try:
+        service.files().update(
+            fileId=DRIVE_FILE_ID,
+            media_body=MediaFileUpload(
+                tmp_path,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+            supportsAllDrives=True,
+        ).execute()
+    finally:
+        os.unlink(tmp_path)
+
+
+def upload_file(local_path: str, filename: str) -> str:
+    """Upload any file to the Shared Drive folder, inferring mime type from extension.
+
+    Returns the web view URL of the uploaded file.
+    """
+    import mimetypes
+
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    mime_type, _ = mimetypes.guess_type(filename)
+    if not mime_type:
+        mime_type = "application/octet-stream"
+
+    creds = _credentials()
+    service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+    uploaded = service.files().create(
+        body={"name": filename, "parents": [SHARED_DRIVE_FOLDER_ID]},
+        media_body=MediaFileUpload(local_path, mimetype=mime_type),
+        supportsAllDrives=True,
+        fields="id,webViewLink",
+    ).execute()
+
+    return uploaded.get("webViewLink", "")
 
 
 def upload_docx(local_path: str, filename: str) -> str:

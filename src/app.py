@@ -17,6 +17,7 @@ from .generators import generate_candidates, get_runtime_config
 from .judge import synthesize, verify_brand_fit
 from .keyword_enrichment import enrich, pool_seed_keywords
 from .page_fetcher import fetch_page
+from .google_ads import generate_ad_assets
 from .pastepack import render_pastepack
 from .schema import BodyChange, CandidateSet, ExecutionPlan, PageSnapshot
 
@@ -465,7 +466,8 @@ def approve(
         if text_idx < len(body_values) and body_values[text_idx] is not None:
             bc.new_text = body_values[text_idx] or None
 
-    result = render_pastepack(plan, snapshot, operator="admin")
+    ad_assets = generate_ad_assets(snapshot, plan)
+    result = render_pastepack(plan, snapshot, operator="admin", ad_assets=ad_assets)
 
     drive_note = ""
     if sheets_client.available():
@@ -491,6 +493,41 @@ def approve(
 def build_app() -> gr.Blocks:
     with gr.Blocks(title="SEO Workflow") as demo:
         gr.Markdown("# SEO Workflow")
+
+        # --- Batch Run ---
+        gr.Markdown("## Batch Run")
+        gr.Markdown(
+            "Trigger a Cloud Run batch job to process all pending URLs in the queue. "
+            "The job runs in the background — docx files and a Google Ads Editor CSV "
+            "are uploaded to Shared Drive automatically when done."
+        )
+        with gr.Row():
+            batch_limit_box = gr.Textbox(
+                label="Max URLs to process (leave blank = all pending)",
+                placeholder="e.g. 10",
+                value="",
+                scale=1,
+            )
+            batch_btn = gr.Button("▶ Start Batch Job", variant="primary", scale=1)
+        batch_status = gr.Markdown()
+
+        def _run_batch(limit_raw: str):
+            limit_raw = (limit_raw or "").strip()
+            limit = int(limit_raw) if limit_raw.isdigit() else None
+            try:
+                from .cloud_run_job import run_batch_with_status
+            except Exception as exc:
+                yield f"❌ Cloud Run module unavailable: {exc}"
+                return
+            yield from run_batch_with_status(limit)
+
+        batch_btn.click(
+            _run_batch,
+            inputs=[batch_limit_box],
+            outputs=[batch_status],
+        )
+
+        gr.Markdown("---")
 
         if RUNTIME.get("warning"):
             gr.Markdown(f"⚠️ {RUNTIME['warning']}")
@@ -747,11 +784,21 @@ def build_app() -> gr.Blocks:
 
 if __name__ == "__main__":
     import os
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    _password = os.environ.get("APP_PASSWORD")
+    if not _password:
+        raise RuntimeError(
+            "APP_PASSWORD is not set. Add it to .env for local dev "
+            "or ensure the Cloud Run secret is wired in."
+        )
+
     app = build_app()
     app.queue(max_size=10)
     app.launch(
         server_name="0.0.0.0",
         server_port=int(os.environ.get("PORT", 8080)),
-        auth=(os.environ.get("APP_USERNAME", "admin"), os.environ.get("APP_PASSWORD", "changeme")),
+        auth=(os.environ.get("APP_USERNAME", "admin"), _password),
         max_threads=10,
     )

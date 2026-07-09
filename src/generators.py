@@ -1,11 +1,14 @@
 """Stage 1: candidate SEO recommendations from 2-3 frontier models in parallel."""
 from __future__ import annotations
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
 import yaml
+
+log = logging.getLogger(__name__)
 
 from .model_clients import available_providers, call_model, get_model_config
 from .schema import CandidateSet, PageSnapshot
@@ -79,8 +82,9 @@ def get_runtime_config() -> dict:
         non_gen_ids = [mid for mid in available_ids if mid not in generator_ids]
         gen_ids = [mid for mid in available_ids if mid in generator_ids]
         default_judge = defaults["judge"]
-        if default_judge in available_ids and default_judge not in generator_ids:
-            judge_pool = [default_judge] + [j for j in non_gen_ids if j != default_judge] + gen_ids
+        if default_judge in available_ids:
+            rest = [j for j in non_gen_ids if j != default_judge] + [j for j in gen_ids if j != default_judge]
+            judge_pool = [default_judge] + rest
         elif non_gen_ids:
             judge_pool = non_gen_ids + gen_ids
         else:
@@ -212,7 +216,15 @@ def generate_candidates(
     """Call each generator model in parallel and return their CandidateSets."""
     with ThreadPoolExecutor(max_workers=max(1, len(generator_specs))) as executor:
         futures = [
-            executor.submit(_generate_one, spec, snapshot, brand, rubric, gsc_row, query_df)
+            (spec, executor.submit(_generate_one, spec, snapshot, brand, rubric, gsc_row, query_df))
             for spec in generator_specs
         ]
-        return [f.result() for f in futures]
+    results = []
+    for spec, f in futures:
+        try:
+            results.append(f.result())
+        except Exception as exc:
+            log.warning("Generator %s failed, skipping: %s", spec["label"], exc)
+    if not results:
+        raise RuntimeError("All generators failed — cannot produce candidates.")
+    return results

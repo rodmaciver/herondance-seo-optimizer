@@ -134,13 +134,26 @@ def _parse_section(raw: pd.DataFrame) -> pd.DataFrame:
 
     Filters to rows with valid (http) URLs after normalization; metric
     columns are kept as NaN where blank (not coerced to 0).
+
+    Extra columns added for batch tracking:
+      _excel_row  — 1-based row number in the source xlsx (for write-back)
+      generated   — True if column B contains "Generated"
     """
     if raw.empty:
-        return pd.DataFrame(columns=QUEUE_COLUMNS)
+        return pd.DataFrame(columns=QUEUE_COLUMNS + ["generated", "_excel_row"])
 
     section = raw.iloc[:, :5].copy()
     while len(section.columns) < 5:
         section[len(section.columns)] = None
+
+    # Read column B (index 1) for "Generated" marker BEFORE renaming.
+    # .astype(bool) ensures numpy bool dtype so ~ works correctly.
+    # pd.Series(..., index=...) ensures index-aligned assignment survives the URL filter.
+    generated = section.iloc[:, 1].apply(
+        lambda x: str(x).strip().lower() == "generated" if pd.notna(x) else False
+    ).astype(bool)
+    excel_rows = pd.Series(section.index + 1, index=section.index)  # 1-based, index-aligned
+
     section.columns = QUEUE_COLUMNS
 
     section["url"] = section["url"].apply(
@@ -151,6 +164,9 @@ def _parse_section(raw: pd.DataFrame) -> pd.DataFrame:
 
     for col in ["clicks", "impressions", "ctr", "avg_position"]:
         section[col] = pd.to_numeric(section[col], errors="coerce")
+
+    section["generated"] = generated
+    section["_excel_row"] = excel_rows
 
     return section.reset_index(drop=True)
 
@@ -169,8 +185,15 @@ def parse_queue_raw(raw: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     divider_pos: int | None = None
     if len(header_positions) >= 2:
         divider_pos = header_positions[1]
-    elif len(header_positions) == 1 and header_positions[0] > 0:
-        divider_pos = header_positions[0]
+    elif len(header_positions) == 1:
+        if header_positions[0] > 0:
+            divider_pos = header_positions[0]
+        else:
+            logging.getLogger(__name__).warning(
+                "Queue sheet: 'Top Pages' header found only at row 0 — "
+                "expected a second occurrence as a backlog divider. "
+                "Treating all rows as backlog; check the sheet structure."
+            )
 
     if divider_pos is not None:
         priority_raw = raw.iloc[:divider_pos]
