@@ -80,7 +80,7 @@ REQUIRED OUTPUT:
 
 USE PAGE-SPECIFIC TERMS: Final SEO title, page title, headings, named writers, named poems, named books, translators, distinctive phrases, narrow Taoist/Zen/contemplative concepts.
 
-USE WHEN APPLICABLE: Heron Dance, Zen Mountain Journal, or The Tao Te Ching Journal when the final page includes a related product, newsletter, callout, or internal link.
+USE WHEN APPLICABLE: Zen Mountain Journal or The Tao Te Ching Journal when the final page includes a related product, newsletter, callout, or internal link. NEVER use the retired name "Heron Dance Art Studio" in ad copy — the studio is rebranding; brand lines are "Zen Mountain Journal" or "Art and Essays by Rod MacIver".
 
 OUTPUT FORMAT: JSON with keys: headlines, descriptions, core_keywords, keyword_variants, negative_keywords."""
 
@@ -397,16 +397,36 @@ def _check(
         if _has_all_caps_word(d):
             failures.append(f"Description {i} contains an all-caps word: '{d}'")
 
-    repeated_headlines = {
-        key for key in (_dedupe_key(value) for value in headlines) if key
-    }
-    if len(repeated_headlines) != len([value for value in headlines if value.strip()]):
-        failures.append("Headlines contain duplicate or near-duplicate lines")
-    repeated_descriptions = {
-        value.casefold().strip() for value in descriptions if value.strip()
-    }
-    if len(repeated_descriptions) != len([value for value in descriptions if value.strip()]):
-        failures.append("Descriptions contain duplicate lines")
+    headline_groups: dict[tuple[str, ...], list[str]] = {}
+    for value in headlines:
+        key = _dedupe_key(value)
+        if key:
+            headline_groups.setdefault(key, []).append(value)
+    for group in headline_groups.values():
+        if len(group) > 1:
+            failures.append(
+                "Near-duplicate headlines — same words reordered; keep one and "
+                "rewrite the rest with different vocabulary: "
+                + " / ".join(f"'{v}'" for v in group)
+            )
+    description_groups: dict[str, list[str]] = {}
+    for value in descriptions:
+        key = value.casefold().strip()
+        if key:
+            description_groups.setdefault(key, []).append(value)
+    for group in description_groups.values():
+        if len(group) > 1:
+            failures.append(
+                "Duplicate descriptions — keep one and rewrite the rest: "
+                + " / ".join(f"'{v}'" for v in group)
+            )
+
+    for i, text in enumerate(headlines + descriptions, 1):
+        if "heron dance art studio" in text.lower():
+            failures.append(
+                "Uses retired brand name 'Heron Dance Art Studio' — use "
+                f"'Zen Mountain Journal' instead: '{text}'"
+            )
 
     all_text = " ".join(headlines + descriptions).lower()
     for banned in BANNED_WORDS:
