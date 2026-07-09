@@ -76,6 +76,24 @@ class GoogleAdsValidationTests(unittest.TestCase):
         # A legitimate wrong-intent negative must NOT be flagged.
         self.assertNotIn("hiking gear", joined)
 
+    def test_rejects_negatives_for_products_the_studio_sells(self):
+        """Today's production case: model tried to negate print commerce terms."""
+        failures = _check(
+            _assets(
+                negative_keywords=[
+                    "art prints", "canvas prints", "framed art",
+                    "poster prints", "mug designs",
+                ]
+            )
+        )
+        joined = " ".join(failures)
+        self.assertIn("products the studio", joined)
+        self.assertIn("art prints", joined)
+        self.assertIn("canvas prints", joined)
+        self.assertIn("framed art", joined)
+        # Merchandise the studio does not sell stays a valid negative.
+        self.assertNotIn("mug designs", joined)
+
 
 if __name__ == "__main__":
     unittest.main()
