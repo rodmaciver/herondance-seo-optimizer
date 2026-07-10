@@ -1,8 +1,11 @@
 """Google Ads RSA copy generation from an existing SEO plan."""
 from __future__ import annotations
 
+import logging
 import re
 from pydantic import BaseModel
+
+log = logging.getLogger(__name__)
 
 from .model_clients import call_model
 from .page_fetcher import PageSnapshot
@@ -303,6 +306,51 @@ def _context_violations(text: str) -> list[str]:
     return violations
 
 
+def _sanitize_negatives(
+    assets: dict,
+    page_words: set[str] | None = None,
+) -> list[str]:
+    """Silently drop negative keywords that are unsafe but safely omittable.
+
+    Four categories are removed rather than sent back to the model for a
+    retry, because omitting a negative keyword never harms a campaign:
+    page-derived negatives (would block the page's own audience),
+    negatives naming products the studio sells, repeats of campaign-level
+    negatives, and negatives that overlap a positive keyword. Returns the
+    list of dropped terms for logging.
+    """
+    neg_kws = assets.get("negative_keywords", [])
+    if not neg_kws:
+        return []
+
+    drop: set[str] = set()
+    drop.update(str(v) for v in _protected_product_negatives(neg_kws))
+    if page_words:
+        drop.update(str(v) for v in _page_derived_negatives(neg_kws, page_words))
+
+    core_kws = assets.get("core_keywords", [])
+    variants_map = assets.get("keyword_variants", {})
+    positive_terms: set[str] = set()
+    for core in core_kws:
+        cleaned = str(core).strip().strip("[]\"").strip()
+        if cleaned:
+            positive_terms.add(cleaned.casefold())
+        variants = variants_map.get(core, variants_map.get(cleaned, []))
+        positive_terms.update(
+            str(value).strip().strip("[]\"").strip().casefold()
+            for value in variants
+            if str(value).strip().strip("[]\"").strip()
+        )
+    for neg in neg_kws:
+        cleaned = str(neg).strip().strip("[]\"").strip().casefold()
+        if cleaned in _CAMPAIGN_NEGATIVES or cleaned in positive_terms:
+            drop.add(str(neg))
+
+    if drop:
+        assets["negative_keywords"] = [n for n in neg_kws if str(n) not in drop]
+    return sorted(drop)
+
+
 def _check(
     assets: dict,
     page_entities: set[str] | None = None,
@@ -491,6 +539,9 @@ def generate_ad_assets(
         try:
             result = call_model(model_config_id, _SYSTEM, user_prompt, _AdAssets, temperature=0.7)
             last_assets = result
+            dropped = _sanitize_negatives(result, page_words)
+            if dropped:
+                log.info("Dropped unsafe negative keywords: %s", ", ".join(dropped))
             last_failures = _check(result, page_entities, page_words)
             if not last_failures:
                 return {
