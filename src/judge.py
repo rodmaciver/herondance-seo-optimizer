@@ -173,6 +173,25 @@ def _banned_voice_hits(text: str, banned: list[str]) -> list[str]:
     return hits
 
 
+def _normalize_redirect(mapping: str | None) -> str | None:
+    """Ensure redirect mappings use Squarespace's required format:
+    '/old-path -> /new-path 301' (leading slashes on both paths)."""
+    if not mapping or "->" not in mapping:
+        return mapping
+    left, right = mapping.split("->", 1)
+    old_path = left.strip()
+    right_parts = right.strip().split()
+    if not right_parts:
+        return mapping
+    new_path = right_parts[0]
+    suffix = " ".join(right_parts[1:]) or "301"
+
+    def _slash(p: str) -> str:
+        return p if p.startswith("/") else "/" + p
+
+    return f"{_slash(old_path)} -> {_slash(new_path)} {suffix}"
+
+
 def validate_plan(plan: ExecutionPlan, rubric: dict, brand: dict | None = None) -> ExecutionPlan:
     """Mechanically check rubric compliance and annotate rubric_check fields."""
     banned = (brand or {}).get("voice", {}).get("banned_marketing_language", [])
@@ -321,6 +340,7 @@ def synthesize(
             except (ValueError, _json.JSONDecodeError):
                 pass
     plan = ExecutionPlan(**result)
+    plan.redirect_mapping = _normalize_redirect(plan.redirect_mapping)
     plan = validate_plan(plan, rubric, brand)
     plan = enforce_standard_sections(plan, snapshot)
     plan = _finalize_keyword_pool(plan, enriched_pool, dataforseo_cfg)

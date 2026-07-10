@@ -348,6 +348,11 @@ def _sanitize_negatives(
 
     if drop:
         assets["negative_keywords"] = [n for n in neg_kws if str(n) not in drop]
+    # Never send an over-length list back for a retry — keep the first 10.
+    if len(assets.get("negative_keywords", [])) > 10:
+        overflow = assets["negative_keywords"][10:]
+        assets["negative_keywords"] = assets["negative_keywords"][:10]
+        drop.update(str(v) for v in overflow)
     return sorted(drop)
 
 
@@ -501,6 +506,34 @@ def _check(
     return failures
 
 
+def _retry_coaching(failures: list[str]) -> str:
+    """Targeted guidance appended to retry prompts for failure types the
+    model handles badly when given only the raw failure message."""
+    coaching = []
+    if any("(max 30)" in f for f in failures):
+        coaching.append(
+            "For every headline over the limit: do NOT trim words from the "
+            "failed headline — write a COMPLETELY NEW, SHORTER headline of "
+            "AT MOST 25 characters. Count the characters before answering."
+        )
+    if any("(max 90)" in f for f in failures):
+        coaching.append(
+            "For every description over the limit: do NOT trim the failed "
+            "description — write a COMPLETELY NEW, SHORTER description of "
+            "AT MOST 80 characters."
+        )
+    banned_hits = re.findall(r"banned phrase: '([^']+)'", " ".join(failures))
+    if banned_hits:
+        words = ", ".join(sorted(set(banned_hits)))
+        coaching.append(
+            f"The banned word(s) [{words}] must not appear ANYWHERE in any "
+            "headline or description, in ANY form or conjugation "
+            "(e.g. awaken/awakening/awakened). Choose entirely different "
+            "vocabulary for those ideas."
+        )
+    return ("\n" + "\n".join(f"- {c}" for c in coaching)) if coaching else ""
+
+
 def generate_ad_assets(
     snapshot: PageSnapshot,
     plan: ExecutionPlan,
@@ -534,6 +567,7 @@ def generate_ad_assets(
             user_prompt += (
                 "\n\nPREVIOUS ATTEMPT FAILED — fix only these issues:\n"
                 + "\n".join(f"- {f}" for f in last_failures)
+                + _retry_coaching(last_failures)
             )
 
         try:
