@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from src.google_ads import _check, _extract_page_words
+from src.google_ads import _check, _extract_page_words, _sanitize_negatives
 from src.schema import PageSnapshot
 
 
@@ -110,6 +110,63 @@ class GoogleAdsValidationTests(unittest.TestCase):
         self.assertIn("Tao of Suffering and Desire", joined)
         self.assertIn("Suffering and Desire of Tao", joined)
 
+    def test_sanitizer_drops_page_derived_negatives(self):
+        """The homepage case: 'guided meditation' mined from the page itself.
+
+        Instead of failing validation and burning retries, the sanitizer
+        silently removes it, keeps legitimate wrong-intent negatives, and
+        the assets then pass _check.
+        """
+        page_words = _extract_page_words(
+            PageSnapshot(
+                url="https://example.org/",
+                title="Zen Mountain Journal — Art and Reflection",
+                h1="Contemplative Art and Writing",
+                meta_description="Guided meditation, Taoist poetry, inner quiet.",
+                headings=["Guided Meditation and Stillness"],
+                body_text=(
+                    "Guided meditation and contemplative practice. "
+                    "Reflections on Taoist poetry and wilderness solitude."
+                ),
+            )
+        )
+        assets = _assets(
+            negative_keywords=["guided meditation", "energy drink", "power company"]
+        )
+        dropped = _sanitize_negatives(assets, page_words)
+        self.assertEqual(dropped, ["guided meditation"])
+        self.assertEqual(
+            assets["negative_keywords"], ["energy drink", "power company"]
+        )
+        self.assertEqual(_check(assets, page_words=page_words), [])
+
+    def test_sanitizer_drops_protected_product_and_campaign_repeats(self):
+        assets = _assets(
+            negative_keywords=["art prints", "free", "energy drink"]
+        )
+        dropped = _sanitize_negatives(assets)
+        self.assertIn("art prints", dropped)
+        self.assertIn("free", dropped)
+        self.assertEqual(assets["negative_keywords"], ["energy drink"])
+        self.assertEqual(_check(assets), [])
+
+    def test_sanitizer_drops_positive_negative_overlap(self):
+        assets = _assets(
+            negative_keywords=["taoist inner energy", "energy drink"]
+        )
+        dropped = _sanitize_negatives(assets)
+        self.assertEqual(dropped, ["taoist inner energy"])
+        self.assertEqual(assets["negative_keywords"], ["energy drink"])
+        self.assertEqual(_check(assets), [])
+
+    def test_sanitizer_leaves_clean_negatives_alone(self):
+        assets = _assets()
+        self.assertEqual(_sanitize_negatives(assets), [])
+        self.assertEqual(
+            assets["negative_keywords"],
+            ["energy drink", "energy healing", "power company"],
+        )
+
     def test_rejects_retired_brand_name(self):
         failures = _check(
             _assets(
@@ -122,6 +179,38 @@ class GoogleAdsValidationTests(unittest.TestCase):
         joined = " ".join(failures)
         self.assertIn("retired brand name", joined)
         self.assertIn("Zen Mountain Journal", joined)
+
+
+
+
+
+class RetryAndTruncationTests(unittest.TestCase):
+    def test_sanitizer_truncates_negatives_to_ten(self):
+        from src.google_ads import _sanitize_negatives
+        twelve = [f"wrong intent {i}" for i in range(12)]
+        assets = _assets(negative_keywords=list(twelve))
+        dropped = _sanitize_negatives(assets)
+        self.assertEqual(len(assets["negative_keywords"]), 10)
+        self.assertEqual(assets["negative_keywords"], twelve[:10])
+        self.assertIn("wrong intent 10", dropped)
+        self.assertIn("wrong intent 11", dropped)
+        self.assertEqual(_check(assets), [])
+
+    def test_retry_coaching_targets_each_failure_type(self):
+        from src.google_ads import _retry_coaching
+        text = _retry_coaching([
+            "Headline 1 is 32 chars (max 30): 'Zen Journaling as Honest Witness'",
+            "Description 2 is 95 chars (max 90): '...'",
+            "Contains banned phrase: 'awaken'",
+        ])
+        self.assertIn("AT MOST 25 characters", text)
+        self.assertIn("AT MOST 80 characters", text)
+        self.assertIn("awaken", text)
+        self.assertIn("ANY form or conjugation", text)
+
+    def test_retry_coaching_empty_for_other_failures(self):
+        from src.google_ads import _retry_coaching
+        self.assertEqual(_retry_coaching(["Near-duplicate headlines: a / b"]), "")
 
 
 if __name__ == "__main__":

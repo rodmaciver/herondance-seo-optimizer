@@ -103,5 +103,29 @@ class SingleModelConfigTests(unittest.TestCase):
         self.assertEqual(claude["model"], "claude-sonnet-4-6")
 
 
+
+
+class RedirectNormalizationTests(unittest.TestCase):
+    def test_adds_leading_slashes(self):
+        from src.judge import _normalize_redirect
+        self.assertEqual(
+            _normalize_redirect("abbey-strange-adventure -> abbey-strange-daring-adventure 301"),
+            "/abbey-strange-adventure -> /abbey-strange-daring-adventure 301",
+        )
+
+    def test_leaves_correct_mapping_unchanged(self):
+        from src.judge import _normalize_redirect
+        self.assertEqual(
+            _normalize_redirect("/butterfly-dreaming-man -> /zhuangzi-butterfly-dream 301"),
+            "/butterfly-dreaming-man -> /zhuangzi-butterfly-dream 301",
+        )
+
+    def test_adds_301_when_missing_and_handles_null(self):
+        from src.judge import _normalize_redirect
+        self.assertEqual(_normalize_redirect("old -> new"), "/old -> /new 301")
+        self.assertIsNone(_normalize_redirect(None))
+        self.assertEqual(_normalize_redirect("keep current"), "keep current")
+
+
 if __name__ == "__main__":
     unittest.main()
