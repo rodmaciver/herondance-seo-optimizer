@@ -2,7 +2,7 @@ models:
   - id: "claude"
     label: "Claude (Anthropic)"
     provider: "anthropic"
-    model: "claude-sonnet-4-5"
+    model: "claude-sonnet-4-6"
   - id: "gpt"
     label: "GPT (OpenAI)"
     provider: "openai"
@@ -14,5 +14,5 @@ models:
     model: "gemini-2.5-flash"
     api_key_env: "GEMINI_API_KEY"
 defaults:
-  generators: ["claude", "gpt"]
-  judge: "gemini"
+  generators: ["claude"]
+  judge: "claude"

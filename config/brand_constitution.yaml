@@ -34,3 +34,53 @@ google_ads_keywords:
     and approximately half must include a Tao or Taoist anchor (e.g. "Tao Te Ching",
     "Taoist", "wu wei"). Never default to a keyword that could describe any general
     spiritual or wellness brand.
+voice:
+  identity_anchor: >
+    The site's signature is QUESTIONS — the conviction that the quality of a
+    life is shaped by the questions one is willing to explore. Reader-facing
+    headings and body text that center a question, or the exploration of
+    questions, carry the brand's identity. Never remove or dilute
+    question-centered language in reader-facing text. Keyword-forward
+    phrasing belongs in seo_title and meta_description, which readers see
+    only in search results — not in H1s or body text, which readers see on
+    the page.
+  register:
+    - "Witness, not instructor: describe and name; never command the reader."
+    - "No imperative marketing verbs aimed at the reader (nurture, discover, unlock, embrace...). Name the things plainly and trust the reader."
+    - "Plain nouns over abstractions. Concrete image over title-case concept."
+    - "One metaphor at most. Trust silence and what is unsaid."
+    - "If a suggestion could belong to any spiritual or wellness website, it is wrong for this one."
+  banned_marketing_language:
+    # Enforced mechanically in code (word-boundary match) on seo_title,
+    # h1, and meta_description. Add new entries one per line.
+    - "nurture"
+    - "unlock"
+    - "unleash"
+    - "elevate"
+    - "empower"
+    - "supercharge"
+    - "turbocharge"
+    - "revolutionize"
+    - "game-changing"
+    - "actionable"
+    - "transform your"
+    - "dive into"
+    - "delve into"
+    - "must-read"
+    - "ultimate guide"
+    - "boost"
+  edit_examples:
+    # The editor's own revisions are the authoritative voice guide.
+    # Append new pairs here as they occur; each one teaches the model.
+    - suggested: "Nurture inner quiet, creative life, and ancient wisdom."
+      revised: "Inner quiet, creative life, and ancient wisdom."
+      lesson: "Drop the imperative verb. Name the things; trust the reader."
+    - suggested: "Replace the H1 'An exploration of questions at the core of a fully lived life' with 'Zen Mountain Journal: Tao Te Ching & Zen Poetry for Contemplative Life'"
+      revised: "Keep the question-centered H1 on the page; put the keyword phrasing in the seo_title field only."
+      lesson: "Questions are the brand. Keywords go in fields only searchers see; the page keeps its own voice."
+    - suggested: "The Inner Journey: A Taoist and Zen Path"
+      revised: "(rejected as a heading — generic, could be any spiritual site)"
+      lesson: "Title-case abstractions read as AI-generated. Prefer a concrete image or a question."
+    - suggested: "Reflections on inner quiet, solitude, wilderness, and creative work."
+      revised: "(approved unchanged)"
+      lesson: "Plain nouns, witness register, no commands — this is the site's sound."
