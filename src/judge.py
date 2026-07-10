@@ -164,8 +164,32 @@ def _annotate(rubric_check: str, ok: bool, note: str) -> str:
     return f"{rubric_check} | {suffix}" if rubric_check else suffix
 
 
-def validate_plan(plan: ExecutionPlan, rubric: dict) -> ExecutionPlan:
+def _banned_voice_hits(text: str, banned: list[str]) -> list[str]:
+    """Return banned marketing phrases found in text (word-boundary match)."""
+    hits = []
+    for phrase in banned:
+        if re.search(r"\b" + re.escape(str(phrase)) + r"\b", text, re.IGNORECASE):
+            hits.append(str(phrase))
+    return hits
+
+
+def validate_plan(plan: ExecutionPlan, rubric: dict, brand: dict | None = None) -> ExecutionPlan:
     """Mechanically check rubric compliance and annotate rubric_check fields."""
+    banned = (brand or {}).get("voice", {}).get("banned_marketing_language", [])
+    _READER_FACING = {"seo_title", "h1", "meta_description"}
+    for item in plan.items:
+        if (
+            banned
+            and item.field in _READER_FACING
+            and item.decision.lower() != "keep current"
+        ):
+            hits = _banned_voice_hits(item.decision, banned)
+            if hits:
+                item.brand_check = _annotate(
+                    item.brand_check,
+                    False,
+                    "banned marketing language: " + ", ".join(hits),
+                )
     for item in plan.items:
         if item.field == "seo_title" and item.decision.lower() != "keep current":
             max_chars = rubric["seo_title"]["max_chars"]
@@ -297,7 +321,7 @@ def synthesize(
             except (ValueError, _json.JSONDecodeError):
                 pass
     plan = ExecutionPlan(**result)
-    plan = validate_plan(plan, rubric)
+    plan = validate_plan(plan, rubric, brand)
     plan = enforce_standard_sections(plan, snapshot)
     plan = _finalize_keyword_pool(plan, enriched_pool, dataforseo_cfg)
     return plan
