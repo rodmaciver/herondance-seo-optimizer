@@ -74,7 +74,7 @@ Brand (always excluded): heron dance, heron dance art studio, heron dance org, h
 
 REQUIRED OUTPUT:
 
-- Generate a candidate pool of roughly 20 headlines, then filter for quality. Return up to 12 headlines (max 30 characters each) where likely or very possible to contribute positively to results. Every headline must satisfy the grounding rules. It is better to return fewer strong headlines than padded mediocre ones. Minimum 3 headlines.
+- Generate a candidate pool of roughly 20 headlines, then filter for quality. Return up to 12 headlines (target 27 characters or fewer — the hard limit is 30, but count characters and stay at or under 27 to leave margin) where likely or very possible to contribute positively to results. Every headline must satisfy the grounding rules. It is better to return fewer strong headlines than padded mediocre ones. Minimum 3 headlines.
 - 2 to 4 descriptions (max 90 characters each), targeting 4 where possible, where likely or very possible to contribute positively to results.
 - 3 to 8 core phrase-match keywords where likely or very possible to receive searches. Format in quotes.
 - For each core keyword, 2 to 4 word-order and minor variants where likely or very possible to contribute positively to results. Format each in brackets.
