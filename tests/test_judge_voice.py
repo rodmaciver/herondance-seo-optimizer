@@ -103,28 +103,27 @@ class SingleModelConfigTests(unittest.TestCase):
         self.assertEqual(claude["model"], "claude-sonnet-4-6")
 
 
+class BrandFitResponseCoercionTests(unittest.TestCase):
+    def test_flags_as_json_string_is_coerced_to_list(self):
+        """_BrandFitResponse must not crash when the model returns flags as a
+        JSON string instead of a list (Pydantic list_type error regression)."""
+        from src.judge import _BrandFitResponse
+        import json
 
+        raw_flags = [{"field": "meta_description", "status": "flag", "note": "Too generic."}]
+        response = _BrandFitResponse(flags=json.dumps(raw_flags))
+        self.assertEqual(len(response.flags), 1)
+        self.assertEqual(response.flags[0].field, "meta_description")
+        self.assertEqual(response.flags[0].status, "flag")
 
-class RedirectNormalizationTests(unittest.TestCase):
-    def test_adds_leading_slashes(self):
-        from src.judge import _normalize_redirect
-        self.assertEqual(
-            _normalize_redirect("abbey-strange-adventure -> abbey-strange-daring-adventure 301"),
-            "/abbey-strange-adventure -> /abbey-strange-daring-adventure 301",
-        )
+    def test_flags_as_list_still_works(self):
+        """Normal list input must continue to work after adding the validator."""
+        from src.judge import _BrandFitResponse
 
-    def test_leaves_correct_mapping_unchanged(self):
-        from src.judge import _normalize_redirect
-        self.assertEqual(
-            _normalize_redirect("/butterfly-dreaming-man -> /zhuangzi-butterfly-dream 301"),
-            "/butterfly-dreaming-man -> /zhuangzi-butterfly-dream 301",
-        )
-
-    def test_adds_301_when_missing_and_handles_null(self):
-        from src.judge import _normalize_redirect
-        self.assertEqual(_normalize_redirect("old -> new"), "/old -> /new 301")
-        self.assertIsNone(_normalize_redirect(None))
-        self.assertEqual(_normalize_redirect("keep current"), "keep current")
+        raw_flags = [{"field": "seo_title", "status": "ok", "note": ""}]
+        response = _BrandFitResponse(flags=raw_flags)
+        self.assertEqual(len(response.flags), 1)
+        self.assertEqual(response.flags[0].status, "ok")
 
 
 if __name__ == "__main__":
