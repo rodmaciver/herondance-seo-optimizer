@@ -5,7 +5,9 @@ import re
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+import json as _json
+
+from pydantic import BaseModel, field_validator
 
 from .keyword_enrichment import category_label, score_viability
 from .model_clients import call_model
@@ -173,25 +175,6 @@ def _banned_voice_hits(text: str, banned: list[str]) -> list[str]:
     return hits
 
 
-def _normalize_redirect(mapping: str | None) -> str | None:
-    """Ensure redirect mappings use Squarespace's required format:
-    '/old-path -> /new-path 301' (leading slashes on both paths)."""
-    if not mapping or "->" not in mapping:
-        return mapping
-    left, right = mapping.split("->", 1)
-    old_path = left.strip()
-    right_parts = right.strip().split()
-    if not right_parts:
-        return mapping
-    new_path = right_parts[0]
-    suffix = " ".join(right_parts[1:]) or "301"
-
-    def _slash(p: str) -> str:
-        return p if p.startswith("/") else "/" + p
-
-    return f"{_slash(old_path)} -> {_slash(new_path)} {suffix}"
-
-
 def validate_plan(plan: ExecutionPlan, rubric: dict, brand: dict | None = None) -> ExecutionPlan:
     """Mechanically check rubric compliance and annotate rubric_check fields."""
     banned = (brand or {}).get("voice", {}).get("banned_marketing_language", [])
@@ -317,6 +300,17 @@ def _finalize_keyword_pool(plan: ExecutionPlan, enriched_pool: list[dict], dataf
     return plan
 
 
+def _validation_failures(plan: ExecutionPlan) -> list[str]:
+    """Return a list of rubric/brand failure strings from an already-validated plan."""
+    failures = []
+    for item in plan.items:
+        if "✗" in (item.rubric_check or ""):
+            failures.append(f"{item.field} rubric: {item.rubric_check}")
+        if "✗" in (item.brand_check or ""):
+            failures.append(f"{item.field} brand: {item.brand_check}")
+    return failures
+
+
 def synthesize(
     candidates: list[CandidateSet],
     snapshot: PageSnapshot,
@@ -328,20 +322,32 @@ def synthesize(
     dataforseo_cfg: dict,
 ) -> ExecutionPlan:
     system, user = build_judge_prompt(candidates, snapshot, brand, rubric, gsc_row, enriched_pool)
-    result = call_model(judge_model_id, system, user, ExecutionPlan, temperature=0.3)
-    result["page_url"] = snapshot.url
-    # Belt-and-suspenders: Claude occasionally returns list/dict fields as JSON
-    # strings inside tool_use blocks. Unwrap any that slipped through.
-    import json as _json
-    for _k, _v in list(result.items()):
-        if isinstance(_v, str) and _v.strip()[:1] in ("[", "{"):
-            try:
-                result[_k] = _json.loads(_v)
-            except (ValueError, _json.JSONDecodeError):
-                pass
-    plan = ExecutionPlan(**result)
-    plan.redirect_mapping = _normalize_redirect(plan.redirect_mapping)
-    plan = validate_plan(plan, rubric, brand)
+
+    def _run(user_prompt: str) -> ExecutionPlan:
+        result = call_model(judge_model_id, system, user_prompt, ExecutionPlan, temperature=0.3)
+        result["page_url"] = snapshot.url
+        # Belt-and-suspenders: Claude occasionally returns list/dict fields as JSON
+        # strings inside tool_use blocks. Unwrap any that slipped through.
+        for _k, _v in list(result.items()):
+            if isinstance(_v, str) and _v.strip()[:1] in ("[", "{"):
+                try:
+                    result[_k] = _json.loads(_v)
+                except (ValueError, _json.JSONDecodeError):
+                    pass
+        plan = ExecutionPlan(**result)
+        plan = validate_plan(plan, rubric, brand)
+        return plan
+
+    plan = _run(user)
+    failures = _validation_failures(plan)
+    if failures:
+        retry_prompt = (
+            user
+            + "\n\nPREVIOUS ATTEMPT FAILED VALIDATION — fix only these issues and regenerate:\n"
+            + "\n".join(f"- {f}" for f in failures)
+        )
+        plan = _run(retry_prompt)
+
     plan = enforce_standard_sections(plan, snapshot)
     plan = _finalize_keyword_pool(plan, enriched_pool, dataforseo_cfg)
     return plan
@@ -353,6 +359,13 @@ def synthesize(
 
 class _BrandFitResponse(BaseModel):
     flags: list[BrandFlag]
+
+    @field_validator("flags", mode="before")
+    @classmethod
+    def _coerce_flags(cls, v):
+        if isinstance(v, str):
+            v = _json.loads(v)
+        return v
 
 
 BRAND_FIT_SYSTEM_PROMPT = """\
