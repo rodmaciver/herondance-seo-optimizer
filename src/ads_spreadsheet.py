@@ -210,8 +210,8 @@ def validate_ads_entry(entry: dict) -> None:
             )
     if not positives:
         raise ValueError("No positive keywords were generated")
-    if not (3 <= len(negatives) <= 10):
-        raise ValueError(f"Need 3-10 page-specific negative keywords, got {len(negatives)}")
+    if len(negatives) > 10:
+        raise ValueError(f"Need 0-10 page-specific negative keywords, got {len(negatives)}")
     overlap = {value.casefold() for value in positives} & {
         value.casefold() for value in negatives
     }
