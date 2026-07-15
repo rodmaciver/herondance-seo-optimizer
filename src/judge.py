@@ -56,7 +56,9 @@ For headings, write just the heading words; for body text, write just the prose.
 Do NOT include notes like "(not using Markdown syntax)" anywhere in instruction or new_text.
 
 If the page's URL slug changes, set redirect_mapping to
-"<old-path> -> <new-path> 301"; otherwise set it to null.
+"/<old-path> -> /<new-path> 301" (both paths MUST begin with "/",
+e.g. "/big-me-little-me -> /big-me-little-me-subconscious 301");
+otherwise set it to null.
 
 KEYWORDS -- you will be given a grounded keyword pool (every keyword
 candidate proposed by every model, plus related terms, each annotated with
