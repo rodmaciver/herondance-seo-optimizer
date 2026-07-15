@@ -213,5 +213,95 @@ class RetryAndTruncationTests(unittest.TestCase):
         self.assertEqual(_retry_coaching(["Near-duplicate headlines: a / b"]), "")
 
 
+class SalvageTests(unittest.TestCase):
+    """The 07/15 batch cases: one bad line among enough good ones should be
+    dropped, not fail the whole page after five retries."""
+
+    def test_drops_overlength_description_when_minimum_remains(self):
+        from src.google_ads import _salvage_assets, _check
+        long_d = (
+            "Essays on balance and harmony within unpredictability. "
+            "From a contemplative artist-painter."  # 91 chars, the balance-harmony case
+        )
+        assets = _assets(
+            descriptions=[
+                "A Taoist reflection on inner energy and silence.",
+                "For readers drawn to Zen practice and quiet attention.",
+                long_d,
+            ]
+        )
+        dropped = _salvage_assets(assets)
+        self.assertIn(long_d, dropped)
+        self.assertEqual(len(assets["descriptions"]), 2)
+        self.assertEqual(_check(assets), [])
+
+    def test_keeps_originals_when_dropping_would_break_minimum(self):
+        from src.google_ads import _salvage_assets, _check
+        long_d = "x" * 95
+        assets = _assets(
+            descriptions=["A Taoist reflection on inner energy.", long_d]
+        )
+        dropped = _salvage_assets(assets)
+        self.assertEqual(dropped, [])
+        self.assertEqual(len(assets["descriptions"]), 2)
+        # _check must still flag it so the retry loop fires.
+        self.assertTrue(any("(max 90)" in f for f in _check(assets)))
+
+    def test_drops_ungrounded_and_overlength_headlines(self):
+        from src.google_ads import _salvage_assets, _check
+        ungrounded = "Morning Light and Birdsong"        # no Zen/Tao anchor
+        overlength = "Zen Poetry Paintings, Asheville"    # 31 chars, asheville case
+        assets = _assets(
+            headlines=[
+                "Taoist Inner Energy",
+                "Zen Silence Practice",
+                "Han Shan and Zen",
+                ungrounded,
+                overlength,
+            ]
+        )
+        dropped = _salvage_assets(assets)
+        self.assertIn(ungrounded, dropped)
+        self.assertIn(overlength, dropped)
+        self.assertEqual(len(assets["headlines"]), 3)
+        self.assertEqual(_check(assets), [])
+
+    def test_drops_banned_word_description(self):
+        from src.google_ads import _salvage_assets, _check
+        banned_d = "The Tao Te Ching Journal is available for pre-order."
+        assets = _assets(
+            descriptions=[
+                "A Taoist reflection on inner energy and silence.",
+                "For readers drawn to Zen practice and quiet attention.",
+                banned_d,
+            ]
+        )
+        dropped = _salvage_assets(assets)
+        self.assertIn(banned_d, dropped)
+        self.assertEqual(_check(assets), [])
+
+    def test_drops_near_duplicate_headline_keeps_first(self):
+        from src.google_ads import _salvage_assets, _check
+        assets = _assets(
+            headlines=[
+                "Tao of Suffering and Desire",
+                "Suffering and Desire of Tao",
+                "Zen Silence Practice",
+                "Han Shan and Zen",
+            ]
+        )
+        dropped = _salvage_assets(assets)
+        self.assertEqual(dropped, ["Suffering and Desire of Tao"])
+        self.assertEqual(assets["headlines"][0], "Tao of Suffering and Desire")
+        self.assertEqual(_check(assets), [])
+
+    def test_clean_assets_untouched(self):
+        from src.google_ads import _salvage_assets
+        assets = _assets()
+        self.assertEqual(_salvage_assets(assets), [])
+        self.assertEqual(len(assets["headlines"]), 5)
+        self.assertEqual(len(assets["descriptions"]), 3)
+
+
 if __name__ == "__main__":
     unittest.main()
