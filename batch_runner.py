@@ -35,7 +35,7 @@ def main(limit: int | None = None) -> None:
     from src.generators import get_runtime_config
     from src.google_ads import generate_ad_assets
     from src.ads_spreadsheet import create_ads_editor_csv, validate_ads_batch
-    from src.pastepack import render_pastepack, resolve_ads_final_url
+    from src.pastepack import render_pastepack
     from src.pipeline import run_page
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,13 @@ def main(limit: int | None = None) -> None:
 
         ads_entry = {
             "url": url,
-            "ads_final_url": resolve_ads_final_url(plan)[0],
+            # Pin ads to the LIVE URL from the queue, not the SEO plan's
+            # proposed slug. If the plan proposes a URL change that is never
+            # applied in Squarespace, ads pointing at the proposed slug would
+            # land on a page that does not exist. The live URL always works —
+            # and if a redirect IS later applied, the 301 still carries the
+            # click to the new page.
+            "ads_final_url": url.rstrip("/"),
             "flagged": ad_assets.get("flagged", False),
             "flag_reason": ad_assets.get("flag_reason", ""),
             "headlines": ad_assets.get("headlines", []),
