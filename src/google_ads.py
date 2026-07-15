@@ -356,6 +356,84 @@ def _sanitize_negatives(
     return sorted(drop)
 
 
+def _text_has_banned(text: str) -> bool:
+    t = text.lower()
+    if any(banned in t for banned in BANNED_WORDS):
+        return True
+    return any(_word_match(t, banned) for banned in BANNED_WORDS_EXACT)
+
+
+def _headline_ok(h: str, page_entities: set[str] | None = None) -> bool:
+    """True if this single headline passes every per-item check in _check."""
+    if len(h) > 30 or "!" in h or "?" in h:
+        return False
+    if not _has_zen_tao_anchor(h, page_entities):
+        return False
+    if _has_all_caps_word(h) or _text_has_banned(h) or _context_violations(h):
+        return False
+    h_lower = h.lower()
+    if "heron dance art studio" in h_lower:
+        return False
+    return not any(h_lower.startswith(start) for start in BANNED_STARTS)
+
+
+def _description_ok(d: str) -> bool:
+    """True if this single description passes every per-item check in _check."""
+    if len(d) > 90 or "!" in d:
+        return False
+    if _has_all_caps_word(d) or _text_has_banned(d) or _context_violations(d):
+        return False
+    return "heron dance art studio" not in d.lower()
+
+
+def _salvage_assets(assets: dict, page_entities: set[str] | None = None) -> list[str]:
+    """Silently drop failing headlines/descriptions when enough clean ones remain.
+
+    The system prompt already prefers fewer strong lines over padded mediocre
+    ones, and omitting a weak line never harms an RSA the way keeping a
+    violation does. Duplicates (same words reordered) keep the first
+    occurrence. If dropping would leave fewer than the required minimum
+    (3 headlines / 2 descriptions), the originals are kept untouched so
+    _check flags them for a model retry instead. Returns dropped items
+    for logging.
+    """
+    dropped: list[str] = []
+
+    headlines = [str(h).strip() for h in assets.get("headlines", []) if str(h).strip()]
+    seen_headline_keys: set[tuple[str, ...]] = set()
+    keep_h: list[str] = []
+    drop_h: list[str] = []
+    for h in headlines:
+        key = _dedupe_key(h)
+        if key in seen_headline_keys or not _headline_ok(h, page_entities):
+            drop_h.append(h)
+            continue
+        seen_headline_keys.add(key)
+        keep_h.append(h)
+    if drop_h and len(keep_h) >= 3:
+        overflow = keep_h[12:]
+        assets["headlines"] = keep_h[:12]
+        dropped.extend(drop_h + overflow)
+
+    descriptions = [str(d).strip() for d in assets.get("descriptions", []) if str(d).strip()]
+    seen_description_keys: set[str] = set()
+    keep_d: list[str] = []
+    drop_d: list[str] = []
+    for d in descriptions:
+        key = d.casefold()
+        if key in seen_description_keys or not _description_ok(d):
+            drop_d.append(d)
+            continue
+        seen_description_keys.add(key)
+        keep_d.append(d)
+    if drop_d and len(keep_d) >= 2:
+        overflow = keep_d[4:]
+        assets["descriptions"] = keep_d[:4]
+        dropped.extend(drop_d + overflow)
+
+    return dropped
+
+
 def _check(
     assets: dict,
     page_entities: set[str] | None = None,
@@ -576,6 +654,10 @@ def generate_ad_assets(
             dropped = _sanitize_negatives(result, page_words)
             if dropped:
                 log.info("Dropped unsafe negative keywords: %s", ", ".join(dropped))
+            salvaged = _salvage_assets(result, page_entities)
+            if salvaged:
+                log.info("Dropped failing ad lines (enough clean ones remain): %s",
+                         " | ".join(salvaged))
             last_failures = _check(result, page_entities, page_words)
             if not last_failures:
                 return {
