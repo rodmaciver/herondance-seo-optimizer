@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -84,6 +85,36 @@ class ExecutionPlan(BaseModel):
                 from json_repair import repair_json
                 return json.loads(repair_json(v))
         return v
+
+    @field_validator("redirect_mapping", mode="before")
+    @classmethod
+    def _normalize_redirect(cls, v: object) -> object:
+        """Mechanically enforce Squarespace redirect format: "/old -> /new 301".
+
+        The judge model is inconsistent about leading slashes, so we never rely
+        on the prompt for formatting. Tolerates missing slashes, full URLs,
+        a unicode arrow, extra whitespace, and a missing trailing 301.
+        """
+        if not isinstance(v, str):
+            return v
+        s = v.strip()
+        if not s or s.lower() in ("null", "none", "n/a"):
+            return None
+        s = s.replace("\u2192", "->")
+        m = re.match(r"^(.*?)\s*->\s*(.*?)(?:\s+301)?\s*$", s)
+        if not m:
+            return s  # unrecognized shape: leave untouched rather than guess
+
+        def _path(p: str) -> str:
+            p = p.strip().strip("\"'")
+            p = re.sub(r"^https?://[^/]+", "", p)  # strip any domain
+            if not p.startswith("/"):
+                p = "/" + p
+            if len(p) > 1:
+                p = p.rstrip("/")
+            return p
+
+        return f"{_path(m.group(1))} -> {_path(m.group(2))} 301"
 
 
 class BrandFlag(BaseModel):
