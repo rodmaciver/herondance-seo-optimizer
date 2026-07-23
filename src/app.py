@@ -149,7 +149,7 @@ GENERATOR_LABEL_TO_SPEC = {g["label"]: g for g in GENERATOR_CHOICES}
 DEFAULT_GENERATOR_LABELS = [g["label"] for g in RUNTIME["generators"]]
 
 # Judge choices = every model that could plausibly judge (generators ∪ judges),
-# deduplicated by label. The UI enforces judge != selected generators at run time.
+# deduplicated by label. Same-model judging is allowed (single-Claude mode is the default).
 JUDGE_LABEL_TO_SPEC = {g["label"]: g for g in GENERATOR_CHOICES}
 for j in RUNTIME["judges"]:
     JUDGE_LABEL_TO_SPEC.setdefault(j["label"], j)
@@ -209,8 +209,6 @@ def analyze_page(
         bar = "█" * filled + "░" * (20 - filled)
         return _SKIP + (f"{_HEADER}\n\n`{bar}` {elapsed}s\n\n{stage}",)
 
-    if judge_label in generator_labels:
-        raise gr.Error("The judge model must be different from the selected generator models.")
     if not generator_labels:
         raise gr.Error("Select at least one generator model.")
 
@@ -564,7 +562,7 @@ def build_app() -> gr.Blocks:
             judge_picker = gr.Dropdown(
                 choices=JUDGE_CHOICES,
                 value=DEFAULT_JUDGE_LABEL,
-                label="Judge model (must differ from generators)",
+                label="Judge model",
             )
 
         analyze_btn = gr.Button("Analyze page", variant="primary")

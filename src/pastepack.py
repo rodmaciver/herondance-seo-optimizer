@@ -75,10 +75,27 @@ def render_pastepack(
 
     header_url = ads_final_url if url_is_changing else plan.page_url
 
+    def _is_keep(v: str) -> bool:
+        return v.strip().lower().startswith("keep")
+
+    manual_body_changes = [bc for bc in plan.body_changes if not bc.automatic]
+    no_material_changes = (
+        _is_keep(seo_title) and _is_keep(meta_description)
+        and _is_keep(url_slug) and _is_keep(h1)
+        and not manual_body_changes
+    )
+
     lines: list[str] = []
     lines.append(f"# SEO update: {header_url}")
     lines.append(f"Generated {timestamp:%Y-%m-%d %H:%M} · Reviewed and approved by {operator}")
     lines.append("")
+    if no_material_changes:
+        lines.append(
+            "**✓ NO CHANGES RECOMMENDED — this page is already in good shape. "
+            "Nothing to do in Squarespace"
+            + (" except the automatic standard sections below." if plan.body_changes else ".")
+        )
+        lines.append("")
     lines.append(f"## {sec}. Page settings → SEO tab")
     sec += 1
     # Trailing two spaces = Markdown hard line-break so Gradio renders each on its own line.

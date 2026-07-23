@@ -24,7 +24,10 @@ candidate models (each labeled).
 For each field (seo_title, h1, url_slug, meta_description, keywords), make
 an executive decision: pick one candidate's suggestion, blend the best
 parts of several, or keep the current value. "keep current" is a first-class
-answer. For each decision give a ONE-sentence rationale, a rubric_check
+answer — and it is the REQUIRED answer unless the replacement is meaningfully
+better for search or for the reader, not merely different. Rewording that
+preserves the same meaning and keyword coverage is churn, not optimization.
+A page that needs nothing is a successful outcome; do not invent work. For each decision give a ONE-sentence rationale, a rubric_check
 (mechanical compliance, e.g. "58 chars ✓ | primary keyword at front ✓"),
 and a brand_check (ONE sentence on how this honors or trades against the
 brand's guiding principle).
@@ -37,9 +40,11 @@ CRITICAL — field definitions for each plan item:
 - `source`: label describing where the value came from — e.g. "Claude",
   "GPT", "blended", or "keep current". This is a label, not the value.
 
-For body_changes, synthesize MULTIPLE concrete content changes (the
-candidates each proposed only one) -- the exact headings/text changes and
-exactly where they go. Every body_change MUST include an `anchor_text` that
+For body_changes, include only changes that clear the same bar — each one
+meaningfully better for search or the reader, not merely different. That may
+mean several changes, one, or NONE (an empty list is valid when candidates
+proposed "no change needed" or their proposals don't clear the bar). Give
+the exact headings/text changes and exactly where they go. Every body_change MUST include an `anchor_text` that
 is an EXACT VERBATIM quote copied from the page body text provided, so a
 human can find it in the page editor without guessing.
 The `instruction` field describes LOCATION and ACTION only — never embed

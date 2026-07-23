@@ -90,6 +90,41 @@ def update_queue_cell(xlsx_bytes: bytes, row: int, col: int, value: str) -> byte
     return out.getvalue()
 
 
+LEDGER_TAB = "Change Ledger"
+LEDGER_HEADER = [
+    "date", "old_url", "new_url", "old_title", "new_title",
+    "old_meta_description", "new_meta_description", "primary_keyword",
+    "implemented_date",
+]
+
+
+def append_ledger_row(xlsx_bytes: bytes, values: list) -> bytes:
+    """Append one row to the Change Ledger tab (created with a header row if
+    absent) and return the updated bytes.
+
+    The ledger records what each optimization changed (titles, meta
+    descriptions, URLs) so that before/after Search Console comparisons and
+    change attribution are possible months later. The implemented_date column
+    is left blank for the VA to fill in when the change goes live on
+    Squarespace.
+    """
+    import openpyxl
+
+    buf = io.BytesIO(xlsx_bytes)
+    wb = openpyxl.load_workbook(buf)
+    if LEDGER_TAB in wb.sheetnames:
+        ws = wb[LEDGER_TAB]
+    else:
+        ws = wb.create_sheet(LEDGER_TAB)
+        ws.append(LEDGER_HEADER)
+    padded = list(values)[: len(LEDGER_HEADER)]
+    padded += [""] * (len(LEDGER_HEADER) - len(padded))
+    ws.append(padded)
+    out = io.BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
 def upload_queue(xlsx_bytes: bytes) -> None:
     """Overwrite the queue xlsx on Google Drive with updated bytes."""
     import os

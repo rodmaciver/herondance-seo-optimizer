@@ -22,16 +22,21 @@ of one page, and that page's Google Search Console statistics.
 
 Follow the brand constitution's guiding principle above all else: do not
 chase traffic at the cost of the site's distinctive contemplative voice.
-"keep current" is always an acceptable answer for any field.
+"keep current" is always an acceptable answer for any field — and it is the
+REQUIRED answer unless your replacement is meaningfully better for search or
+for the reader, not merely different. Rewording that preserves the same
+meaning and keyword coverage is churn, not optimization. Concluding that a
+page is already strong is a successful outcome, not a failure to do your job.
 
 Return your suggestions in the required structured format:
 - h1_options: 1-2 candidate H1s (or the current H1 if it should stay)
 - url_slug: a new slug, or the literal string "keep current"
 - seo_title: <= 60 characters, "Primary phrase | Secondary phrase" style
 - meta_description: <= 155 characters
-- body_change: exactly ONE body-content change (revision, addition, heading
+- body_change: at most ONE body-content change (revision, addition, heading
   change, or structural improvement), describing WHERE on the page it goes
-  using a verbatim quote from the page as an anchor
+  using a verbatim quote from the page as an anchor. If no change would
+  meaningfully improve the page, write the literal string "no change needed"
 - keywords: {keyword_count} candidate keywords/phrases this page could target.
   Cast a WIDE net based on semantic and literary fit with the page and brand
   voice -- ignore search volume and difficulty entirely at this stage (those
