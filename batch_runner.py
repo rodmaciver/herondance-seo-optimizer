@@ -30,6 +30,56 @@ log = logging.getLogger(__name__)
 OUTPUT_DIR = Path(__file__).resolve().parent / "output"
 
 
+def _plan_decision(plan, field: str) -> str:
+    """Return the plan's decision for a given field ('' if absent)."""
+    for item in plan.items:
+        if item.field == field:
+            return item.decision or ""
+    return ""
+
+
+def _ledger_new_url(url: str, plan) -> str:
+    """Live URL after the change: redirect target if the slug changed, else unchanged."""
+    if plan.redirect_mapping:
+        import re as _re
+        m = _re.match(r"^.*->\s*(\S+)\s+301$", plan.redirect_mapping)
+        if m:
+            m2 = _re.match(r"^(https?://[^/]+)", url)
+            if m2:
+                return m2.group(1) + m.group(1)
+    return url
+
+
+def _ads_strength(plan) -> int:
+    """Estimated page strength for ad ordering: total monthly search volume
+    of the keywords this page's ads target (judge-selected keywords with
+    real DataForSEO volume). Pages whose keywords nobody searches for
+    score 0 and sink to the bottom of the ads spreadsheet."""
+    pool = getattr(plan, "keyword_pool", None) or []
+    score = sum((kw.volume or 0) for kw in pool if getattr(kw, "selected", False))
+    if score == 0:
+        # No selected keyword had volume data: fall back to the three
+        # highest-volume keywords in the pool so ordering degrades gracefully.
+        volumes = sorted(((kw.volume or 0) for kw in pool), reverse=True)
+        score = sum(volumes[:3])
+    return score
+
+
+def _ledger_row(url: str, snapshot, plan) -> list:
+    from datetime import datetime as _dt
+    return [
+        f"{_dt.now():%Y-%m-%d}",
+        url,
+        _ledger_new_url(url, plan),
+        snapshot.title or "",
+        _plan_decision(plan, "seo_title"),
+        snapshot.meta_description or "",
+        _plan_decision(plan, "meta_description"),
+        plan.primary_keyword or "",
+        "",  # implemented_date — VA fills in when live on Squarespace
+    ]
+
+
 def main(limit: int | None = None) -> None:
     from src import sheets_client, workbook
     from src.generators import get_runtime_config
@@ -131,6 +181,7 @@ def main(limit: int | None = None) -> None:
             "core_keywords": ad_assets.get("core_keywords", []),
             "keyword_variants": ad_assets.get("keyword_variants", {}),
             "negative_keywords": ad_assets.get("negative_keywords", []),
+            "strength_score": _ads_strength(plan),
         }
         try:
             validate_ads_batch(ads_batch + [ads_entry])
@@ -153,14 +204,26 @@ def main(limit: int | None = None) -> None:
         ads_batch.append(ads_entry)
 
         # Mark as Generated in column B; write redirect mapping to column C (if any).
-        if sheets_client.available() and xlsx_bytes is not None and excel_row is not None:
+        # Read-modify-write: re-download the CURRENT sheet, apply only this
+        # page's changes, and upload. Holding one snapshot for the whole run
+        # meant any manual edit made while a batch was running (e.g. clearing
+        # Generated markers to force a rerun) was silently overwritten by the
+        # next per-page upload.
+        if sheets_client.available() and excel_row is not None:
             try:
-                xlsx_bytes = sheets_client.update_queue_cell(xlsx_bytes, excel_row, 2, "Generated")
+                _, fresh_bytes = sheets_client.read_queue_with_bytes()
+                fresh_bytes = sheets_client.update_queue_cell(fresh_bytes, excel_row, 2, "Generated")
                 if plan.redirect_mapping:
-                    xlsx_bytes = sheets_client.update_queue_cell(
-                        xlsx_bytes, excel_row, 3, plan.redirect_mapping
+                    fresh_bytes = sheets_client.update_queue_cell(
+                        fresh_bytes, excel_row, 3, plan.redirect_mapping
                     )
-                sheets_client.upload_queue(xlsx_bytes)
+                try:
+                    fresh_bytes = sheets_client.append_ledger_row(
+                        fresh_bytes, _ledger_row(url, snapshot, plan)
+                    )
+                except Exception as exc:
+                    log.warning("  Ledger append failed (non-fatal): %s", exc)
+                sheets_client.upload_queue(fresh_bytes)
                 log.info("  Marked row %d as Generated in sheet.", excel_row)
             except Exception as exc:
                 log.warning("  Failed to mark Generated in sheet: %s", exc)
@@ -178,6 +241,9 @@ def main(limit: int | None = None) -> None:
     # Build and upload one Google Ads Editor CSV for this batch.
     if ads_batch:
         try:
+            # Strongest pages first so the top of the Ads Editor spreadsheet
+            # is the natural "enable these first" shortlist.
+            ads_batch.sort(key=lambda e: e.get("strength_score", 0), reverse=True)
             ss_path = create_ads_editor_csv(ads_batch, batch_ts)
             ss_name = Path(ss_path).name
             log.info("Google Ads Editor CSV: %s", ss_name)
